@@ -3,11 +3,13 @@
 #include <cstdlib>
 #include <ctime>
 #include <vector>
+#include <cstring>
 #include <list>
 #include <set>
 #include <algorithm>
 
 using namespace std;
+
 
 /************************ Global Variables ***************************/
 
@@ -21,7 +23,6 @@ vector< vector <int> > d;
 
 /****************************** Utils Functions *********************************/
 
-
 float Rand(void){
     return ((double) rand() / (RAND_MAX));
 }
@@ -30,12 +31,12 @@ int Randint(int low, int high){
     return rand() % (low+high) + low;
 }
 
-
 inline void swap(int &a, int &b){
 	int aux = a;
 	a = b;
 	b = aux;
 }
+
 
 /****************************** Sort struct *********************************/
 
@@ -56,7 +57,7 @@ struct bySecond2{
 
 /****************************** Cost Function *********************************/
 
-// Calculate a solution cost
+// Calculate a cost
 int costFunction(const vector<int> &s){
 	int sum = 0;
 
@@ -157,10 +158,12 @@ vector<int> bl_QAP(){
 }
 
 
-/********************************** GENETICO ************************************/
+/********************************** GENETIC UTILS ************************************/
 
 struct chromosome{
+    // Permutation vector
 	vector<int> s;
+    // Fitness value
 	double value;
 
 	chromosome(vector<int> _s, double v){
@@ -173,6 +176,7 @@ struct chromosome{
 bool comp_chromosome(const chromosome &c1, const chromosome &c2){
 	return c1.value < c2.value;
 }
+
 
 chromosome crossChromosome(const chromosome &c1, const chromosome &c2){
 
@@ -201,7 +205,6 @@ chromosome crossChromosome(const chromosome &c1, const chromosome &c2){
 
 	return chromosome(c, costFunction(c));
 }
-
 
 
 void competition(vector<chromosome> &population, chromosome &child1, chromosome & child2){
@@ -258,37 +261,34 @@ void initPopulation(vector<chromosome> &population, int tam_p, int n){
 }
 
 
-vector<int> Stationary(){
-    int evals = 0;
+/********************************** STATIONARY ************************************/
+
+vector<int> Stationary(int max_generations = 1000){
 	int tam_p = 50;
 	vector<chromosome> population;
 	initPopulation(population, tam_p, n);
 
-	while(evals < 100000){
+	for(int generation = 0; generation < max_generations; generation++){
 		chromosome father1, father2, child1, child2;
 
 		father1 = binaryTournament(population);
 		father2 = binaryTournament(population);
 		child1 = crossChromosome(father1, father2);
-		evals++;
 
 		father1 = binaryTournament(population);
 		father2 = binaryTournament(population);
 		child2 = crossChromosome(father1, father2);
-		evals++;
 
 		for(int i = 0; i < n; i++){
 			if(Rand() < 0.001){
 				int rand_index = Randint(0, n);
 				swap(child1.s[i], child1.s[rand_index]);
 				child1.value = costFunction(child1.s);
-				evals++;
 			}
 			if(Rand() < 0.001){
 				int rand_index = Randint(0, n);
 				swap(child2.s[i], child2.s[rand_index]);
 				child2.value = costFunction(child2.s);
-				evals++;
 			}
 		}
         competition(population, child1, child2);
@@ -303,6 +303,7 @@ vector<int> Stationary(){
     return population[best].s;
 }
 
+/********************************** BL CHROMOSOME ************************************/
 
 // BL-QAP
 chromosome bl_QAP(chromosome c){
@@ -313,7 +314,7 @@ chromosome bl_QAP(chromosome c){
 
 	int cost = c.value;
 
-	while(improve_flag && iters < 400){
+	while(improve_flag && iters < 100){
 		for(int i = 0; i < n; i++){
 			if(dlb[i] == 0){
 				improve_flag = false;
@@ -337,67 +338,92 @@ chromosome bl_QAP(chromosome c){
 	return chromosome(s, costFunction(s));
 }
 
+/********************************** GENERATIONAL ************************************/
 
-
-vector<int> Generational(int memetic = -1){
-	int k1, k2;
-	int evals = 0;
-	int generations = 0;
-    int tam_p = 10;
+vector<int> Generational(string algoritmo, int max_generations = 100){
+    // Population size
+    int tam_p = 50;
+    // Número máximo de generaciones
 	vector<chromosome> population;
+
+    int best = 0, worst = 0;
 
 	// init population
 	initPopulation(population, tam_p, n);
 
-	int best = 0, worst = 0;
-
+    // Buscamos al mejor y peor de la población
 	for(int i = 1; i < tam_p; i++){
-		if(population[i].value > population[best].value)
-			best = i;
+		if(population[i].value < population[best].value){
+            best = i;
+        }
+		if(population[i].value > population[worst].value){
+            worst = i;
+        }
 	}
 
-	while(evals < 50000){
+    // Iterate generations
+	for(int generations = 1; generations < max_generations; generations++){
+        // Save the best individual in the population
 		chromosome best_chromosome_old = population[best];
 
-        if(memetic == 0 && generations%10 == 0){
-    		for(int j = 0; j < tam_p; j++){
-    			population[j] = bl_QAP(population[j]);
+        // Aplicar variantes con búsqueda local
+        if(algoritmo != "ESTANDAR" && generations%10 == 0){
+            // Algoritmo baldwiniano: solo obtenemos el fitness ya que el
+            // cruce se hace sin las características aprendidas
+            if(algoritmo == "BALDWINIANO"){
+                for(int j = 0; j < tam_p; j++){
+        			population[j].value = bl_QAP(population[j]).value;
+                }
+            }
+            // Algoritmo lamarckiano: esta vez los individuos si que transmiten
+            // las características aprendidas
+            else if(algoritmo == "LAMARCKIANO"){
+                for(int j = 0; j < tam_p; j++){
+                    population[j] = bl_QAP(population[j]);
+                }
             }
         }
 
 		for(int j = 0; j < tam_p; j++){
+            // 0.7 probability of cross
 			if(Rand() < 0.7){
 				chromosome father1, father2, child;
 
+                // Get parents by bnary tournament
 				father1 = binaryTournament(population);
 				father2 = binaryTournament(population);
+
+                // Cross parents to get the child
 				child = crossChromosome(father1, father2);
-				evals++;
 
 				for(int k = 0; k < n; k++){
+                    // 0.001 probability of gen mutation
 					if(Rand() <= 0.001){
         				int rand_index = Randint(0, n);
         				swap(child.s[k], child.s[rand_index]);
         				child.value = costFunction(child.s);
-        				evals++;
 					}
 				}
 				population[j] = child;
 			}
 
+            // Get the index of best individual in the population
 			if(population[j].value < population[best].value){
 				best = j;
 			}
+            // Get the index of worst individual in the population
 			if(population[j].value > population[worst].value){
 				worst = j;
 			}
 		}
-
-		generations++;
+        // Replace the worst of the population
 		population[worst] = best_chromosome_old;
+
+        if(best_chromosome_old.value < population[best].value)
+            best = worst;
 	}
 
-	return population[best].s;
+    return bl_QAP(population[best]).s;
 }
 
 /********************************************************************************/
@@ -405,7 +431,6 @@ vector<int> Generational(int memetic = -1){
 
 void input(char* nombre_fichero){
 	ifstream fe(nombre_fichero);
-
 	fe >> n;
 
 	// Introduce flow
@@ -427,81 +452,77 @@ void input(char* nombre_fichero){
 	fe.close();
 }
 
+
 int main(int argc, char** argv){
 
 	struct timespec cgt1,cgt2;
+    vector<int> solution;
+    double ncgt;
+    int max_generations, result;
+    double score;
+    string algorithm_name;
 
-	if (argc != 2) {
-		cout << "[ERROR] USO: <" << argv[0] << "> <fichero>\n";
+	if (argc < 3) {
+		cout << "[ERROR] USO: <" << argv[0] << "> <fichero> <opcion>\n";
+        cout << "Para elegir una opción seleccione un número:" << endl;
+        cout << " 1: Algoritmo genético estándar." << endl;
+        cout << " 2: Algoritmo genético baldwiniano." << endl;
+        cout << " 3: Algoritmo genético lamarckiano." << endl;
 		exit(-1);
 	}
 
 	// Read flow and distances
     input(argv[1]);
+    // Get option
+    string option = argv[2];
 
+    // Get num of generations
+    if(argc == 4){
+        max_generations = atoi(argv[3]);
+    }
+    else{
+        max_generations = 100;
+    }
 
-    /******************** GREDDY ********************/
-
-	clock_gettime(CLOCK_REALTIME,&cgt1);
-	vector<int> solution = greddy_QAP();
-	clock_gettime(CLOCK_REALTIME,&cgt2);
-
-	double ncgt = (double) (cgt2.tv_sec-cgt1.tv_sec)+(double) ((cgt2.tv_nsec-cgt1.tv_nsec)/(1.e+9));
-
-	cout << "Greddy: " << costFunction(solution) << endl;
-	cout << "Time:   " << ncgt << endl << endl;
-
-
-    /******************** LOCAL SEARCH ********************/
-
-	clock_gettime(CLOCK_REALTIME,&cgt1);
-	solution = bl_QAP();
-	clock_gettime(CLOCK_REALTIME,&cgt2);
-
-	ncgt = (double) (cgt2.tv_sec-cgt1.tv_sec)+(double) ((cgt2.tv_nsec-cgt1.tv_nsec)/(1.e+9));
-
-	cout << "First Better: " << costFunction(solution) << endl;
-	cout << "Time:   " << ncgt << endl << endl;
-
-
-    /******************** STATIONARY ********************/
-
+    // Start clock
     clock_gettime(CLOCK_REALTIME,&cgt1);
-    solution = Stationary();
+
+    // Execute algorithm
+
+    switch(option[0]){
+		case '1':
+            algorithm_name = "ESTANDAR";
+            solution = Generational(algorithm_name, max_generations);
+		break;
+		case '2':
+            algorithm_name = "BALDWINIANO";
+            solution = Generational(algorithm_name, max_generations);
+		break;
+		case '3':
+            algorithm_name = "LAMARCKIANO";
+            solution = Generational(algorithm_name, max_generations);
+		break;
+		case '4':
+            algorithm_name = "ESTACIONARIO";
+            solution = solution = Stationary(max_generations);
+		break;
+	}
+
+    // Stop clock
     clock_gettime(CLOCK_REALTIME,&cgt2);
 
+    // Get results
     ncgt = (double) (cgt2.tv_sec-cgt1.tv_sec)+(double) ((cgt2.tv_nsec-cgt1.tv_nsec)/(1.e+9));
+    result = costFunction(solution);
+    score = max(5.0-100.0*(costFunction(solution)-44759294.0)/44759294.0, 0.0);
 
-    cout << "Stationary: " << costFunction(solution) << endl;
+    // Print results
+    cout << algorithm_name << ": " << result << endl;
     cout << "Time:   " << ncgt << endl << endl;
+    cout << "Nota: " << score << endl;
 
-
-    /******************** GENERATIONAL ********************/
-
-    clock_gettime(CLOCK_REALTIME,&cgt1);
-    solution = Generational();
-    clock_gettime(CLOCK_REALTIME,&cgt2);
-
-    ncgt = (double) (cgt2.tv_sec-cgt1.tv_sec)+(double) ((cgt2.tv_nsec-cgt1.tv_nsec)/(1.e+9));
-
-    cout << "Generational: " << costFunction(solution) << endl;
-    cout << "Time:   " << ncgt << endl << endl;
-
-
-    /******************** GEN MEMETIC ********************/
-
-    clock_gettime(CLOCK_REALTIME,&cgt1);
-    solution = Generational(0);
-    clock_gettime(CLOCK_REALTIME,&cgt2);
-
-    ncgt = (double) (cgt2.tv_sec-cgt1.tv_sec)+(double) ((cgt2.tv_nsec-cgt1.tv_nsec)/(1.e+9));
-
-    cout << "Gen. Memetic: " << costFunction(solution) << endl;
-    cout << "Time:   " << ncgt << endl << endl;
-
-
-    /*for(int i = 0; i < n; i++)
-        cout << permutation[i] << " ";
-    cout << endl << endl;*/
+    for(int i = 0; i < n; i++)
+        cout << solution[i] << " ";
+    cout << endl << endl;
 
 }
