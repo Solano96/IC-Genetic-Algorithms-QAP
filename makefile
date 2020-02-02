@@ -2,8 +2,8 @@
 CXX=g++
 CXXFLAGS= -O2
 
-main : main.cpp
-	 $(CXX) $(CXXFLAGS) -o main main.cpp
+main : src/main.cpp
+	 $(CXX) $(CXXFLAGS) -o main src/main.cpp
 
 clean:
 	rm main
